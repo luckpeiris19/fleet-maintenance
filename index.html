@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Fleet Maintenance Dashboard</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 2rem;
+      background-color: #f4f4f4;
+    }
+
+    h1 {
+      color: #333;
+    }
+
+    input, button {
+      margin: 0.4rem 0.6rem 0.4rem 0;
+      padding: 0.4rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+      background-color: white;
+    }
+
+    th, td {
+      padding: 10px;
+      border: 1px solid #ccc;
+      text-align: left;
+    }
+
+    th {
+      background-color: #333;
+      color: white;
+    }
+
+    tr.overdue {
+      background-color: #ffcccc;
+    }
+
+    #formContainer,
+    #deleteSection,
+    #addSection {
+      background-color: #fff;
+      padding: 1rem;
+      border: 1px solid #ccc;
+      margin-top: 2rem;
+      max-width: 700px;
+    }
+
+    .side-by-side {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 2rem;
+    }
+
+    .form-box {
+      flex: 1;
+      min-width: 300px;
+    }
+
+    .form-box h3 {
+      margin-top: 0;
+    }
+
+    .form-box label {
+      display: block;
+      margin-top: 0.5rem;
+      font-weight: bold;
+    }
+
+    .form-box input {
+      width: 95%;
+      padding: 0.4rem;
+      margin-top: 0.2rem;
+      margin-bottom: 0.8rem;
+    }
+
+    .delete-btn {
+      background: #dc3545;
+      color: white;
+      border: none;
+    }
+
+    .submit-btn {
+      background: #007bff;
+      color: white;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Fleet Maintenance Dashboard</h1>
+
+  <!-- Search Controls -->
+  <input id="registration" placeholder="Registration (e.g., AB1234CDE)" />
+  <button onclick="fetchByRegistration()">Search by Registration</button>
+
+  <input id="vehicleType" placeholder="Vehicle Type (e.g., car, van, suv)" />
+  <button onclick="fetchByType()">Search by Type</button>
+
+  <input type="number" id="daysFilter" placeholder="Due in next X days" />
+  <button onclick="filterByDueDates()">Filter MOT/Service Due</button>
+
+  <button onclick="sortByMotDate()">Sort MOT Expiry</button>
+  <button onclick="sortByServiceDate()">Sort Service Due</button>
+  <button onclick="fetchAll()">Load All</button>
+
+  <!-- Table Display -->
+  <table>
+    <thead>
+      <tr>
+        <th>Registration</th>
+        <th>Type</th>
+        <th>Brand</th>
+        <th>Model</th>
+        <th>Region</th>
+        <th>Mileage</th>
+        <th>MOT Expiry</th>
+        <th>Service Due</th>
+      </tr>
+    </thead>
+    <tbody id="resultsTable"></tbody>
+  </table>
+
+  <!-- Add + Delete Section Side by Side -->
+  <div class="side-by-side">
+    <!-- Add Section -->
+    <div class="form-box" id="addSection">
+      <h3>Add a New Vehicle</h3>
+      <label for="addReg">Registration</label>
+      <input id="addReg" placeholder="e.g., AB1234CDE" />
+
+      <label for="addType">Type</label>
+      <input id="addType" placeholder="e.g., car, van" />
+
+      <label for="addBrand">Brand</label>
+      <input id="addBrand" placeholder="e.g., Toyota" />
+
+      <label for="addModel">Model</label>
+      <input id="addModel" placeholder="e.g., A180" />
+
+      <label for="addRegion">Region</label>
+      <input id="addRegion" placeholder="e.g., London" />
+
+      <label for="addMileage">Mileage</label>
+      <input id="addMileage" type="number" placeholder="e.g., 56000" />
+
+      <label for="addMOT">MOT Expiry Date</label>
+      <input id="addMOT" type="date" />
+
+      <label for="addService">Service Due Date</label>
+      <input id="addService" type="date" />
+
+      <button class="submit-btn" onclick="addNewVehicle()">Add Vehicle</button>
+    </div>
+
+    <!-- Delete Section -->
+    <div class="form-box" id="deleteSection">
+      <h3>Delete a Vehicle</h3>
+      <label for="deleteReg">Registration</label>
+      <input id="deleteReg" placeholder="e.g., AB1234CDE" />
+
+      <label for="deleteMileage">Mileage</label>
+      <input id="deleteMileage" type="number" placeholder="e.g., 80000" />
+
+      <button class="delete-btn" onclick="deleteVehicleByInput()">Delete Vehicle</button>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:3000/api/maintenance';
+
+    async function fetchAll() {
+      const res = await fetch(API_BASE);
+      const data = await res.json();
+      populateTable(data);
+    }
+
+    async function fetchByRegistration() {
+      const reg = document.getElementById('registration').value.trim();
+      if (!reg) return alert("Please enter a registration");
+      const res = await fetch(`${API_BASE}/registration/${reg}`);
+      const data = await res.json();
+      populateTable(data);
+    }
+
+    async function fetchByType() {
+      const type = document.getElementById('vehicleType').value.trim();
+      if (!type) return alert("Please enter a Vehicle Type");
+      const res = await fetch(`${API_BASE}/type/${type}`);
+      const data = await res.json();
+      populateTable(data);
+    }
+
+    function filterByDueDates() {
+      const days = parseInt(document.getElementById('daysFilter').value.trim(), 10);
+      if (isNaN(days)) return alert("Please enter a valid number of days");
+
+      fetch(API_BASE)
+        .then(res => res.json())
+        .then(data => {
+          const today = new Date();
+          const cutoff = new Date(today.getTime() + days * 24 * 60 * 60 * 1000);
+          const filtered = data.filter(item => {
+            const mot = item.mot_expiry_date ? new Date(item.mot_expiry_date) : null;
+            const service = item.next_service_due_date ? new Date(item.next_service_due_date) : null;
+            return (mot && mot <= cutoff) || (service && service <= cutoff);
+          });
+          populateTable(filtered);
+        });
+    }
+
+    function sortByMotDate() {
+      fetch(API_BASE)
+        .then(res => res.json())
+        .then(data => {
+          const cutoff = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+          const filtered = data
+            .filter(item => item.mot_expiry_date)
+            .map(item => ({ ...item, mot: new Date(item.mot_expiry_date) }))
+            .filter(item => item.mot <= cutoff)
+            .sort((a, b) => a.mot - b.mot);
+          populateTable(filtered);
+        });
+    }
+
+    function sortByServiceDate() {
+      fetch(API_BASE)
+        .then(res => res.json())
+        .then(data => {
+          const cutoff = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+          const filtered = data
+            .filter(item => item.next_service_due_date)
+            .map(item => ({ ...item, service: new Date(item.next_service_due_date) }))
+            .filter(item => item.service <= cutoff)
+            .sort((a, b) => a.service - b.service);
+          populateTable(filtered);
+        });
+    }
+
+    function populateTable(data) {
+      const tbody = document.getElementById('resultsTable');
+      tbody.innerHTML = '';
+      const today = new Date();
+      if (!Array.isArray(data) || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8">No results found.</td></tr>';
+        return;
+      }
+
+      data.forEach(item => {
+        const motDate = item.mot_expiry_date ? new Date(item.mot_expiry_date) : null;
+        const serviceDate = item.next_service_due_date ? new Date(item.next_service_due_date) : null;
+        const isOverdue = (motDate && motDate < today) || (serviceDate && serviceDate < today);
+        const rowClass = isOverdue ? 'class="overdue"' : '';
+
+        const row = `
+          <tr ${rowClass}>
+            <td>${item.registration || '-'}</td>
+            <td>${item.vehicle_type || '-'}</td>
+            <td>${item.brand || '-'}</td>
+            <td>${item.model || '-'}</td>
+            <td>${item.region || '-'}</td>
+            <td>${item.mileage || '-'}</td>
+            <td>${item.mot_expiry_date || '-'}</td>
+            <td>${item.next_service_due_date || '-'}</td>
+          </tr>`;
+        tbody.innerHTML += row;
+      });
+    }
+
+    async function deleteVehicleByInput() {
+      const reg = document.getElementById('deleteReg').value.trim().toUpperCase();
+      const mileage = document.getElementById('deleteMileage').value.trim();
+
+      if (!reg || !mileage) return alert("Please enter both registration and mileage.");
+
+      const confirmDelete = confirm(`Are you sure you want to delete ${reg} with mileage ${mileage}?`);
+      if (!confirmDelete) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/${reg}`, { method: 'DELETE' });
+        if (!res.ok) {
+          const err = await res.json();
+          alert("❌ Failed to delete: " + (err.error || err.message));
+        } else {
+          alert("✅ Vehicle deleted.");
+          fetchAll();
+        }
+      } catch (error) {
+        console.error("Delete error:", error);
+        alert("❌ Error deleting vehicle.");
+      }
+    }
+
+    async function addNewVehicle() {
+      const registration = document.getElementById('addReg').value.trim().toUpperCase();
+
+      const payload = {
+        registration,
+        vehicle_type: document.getElementById('addType').value.trim(),
+        brand: document.getElementById('addBrand').value.trim(),
+        model: document.getElementById('addModel').value.trim(),
+        region: document.getElementById('addRegion').value.trim(),
+        mileage: Number(document.getElementById('addMileage').value.trim()) || 0,
+        mot_expiry_date: document.getElementById('addMOT').value
+          ? new Date(document.getElementById('addMOT').value).toISOString().split('T')[0]
+          : '',
+        next_service_due_date: document.getElementById('addService').value
+          ? new Date(document.getElementById('addService').value).toISOString().split('T')[0]
+          : ''
+      };
+
+      if (!registration) return alert("❗ Registration is required.");
+
+      try {
+        const existsRes = await fetch(`${API_BASE}/registration/${registration}`);
+        const exists = await existsRes.json();
+
+        if (exists.length > 0) {
+          return alert("⚠️ Vehicle with this registration already exists.");
+        }
+
+        const res = await fetch(API_BASE, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          return alert("❌ Failed: " + (err.error || err.message));
+        }
+
+        alert("✅ Vehicle added successfully.");
+        fetchAll();
+
+        ['addReg', 'addType', 'addBrand', 'addModel', 'addRegion', 'addMileage', 'addMOT', 'addService'].forEach(id => {
+          document.getElementById(id).value = '';
+        });
+
+      } catch (error) {
+        console.error("❌ Error adding vehicle:", error);
+        alert("❌ Something went wrong.");
+      }
+    }
+  </script>
+</body>
+</html>
